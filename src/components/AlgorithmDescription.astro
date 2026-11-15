@@ -1,0 +1,178 @@
+---
+import ComplexityChart from "@components/ComplexityChart.astro"
+import type { Locale } from "@i18n/translations"
+import { buildAlgorithmFaqs } from "@lib/algorithm-seo"
+import { getRelatedAlgorithms } from "@lib/categories"
+import { difficultyPresentation } from "@lib/difficulty"
+import { getAlgorithmPath } from "@lib/locale-url"
+import type { AlgorithmSummary, Difficulty } from "@lib/types"
+
+interface Props {
+  description: string
+  difficulty: Difficulty
+  locale: Locale
+  pageTitle?: string
+  metaDescription?: string
+  /** The stage renders its own persistent compact header. */
+  showHeader?: boolean
+  /** When set, appends related algorithms + FAQ for richer indexable content. */
+  algorithm?: AlgorithmSummary
+}
+
+type ContentBlock =
+  | { type: "heading"; text: string }
+  | { type: "bullet-list"; items: string[] }
+  | { type: "mono"; text: string }
+  | { type: "numbered"; text: string }
+  | { type: "spacer" }
+  | { type: "paragraph"; text: string }
+
+const {
+  description,
+  difficulty,
+  locale,
+  pageTitle,
+  metaDescription,
+  showHeader = true,
+  algorithm,
+} = Astro.props
+const lines = description.split("\n")
+const title = lines.shift()?.trim() ?? ""
+const blocks: ContentBlock[] = []
+
+for (let index = 0; index < lines.length; index++) {
+  const line = lines[index]
+  const trimmed = line.trim()
+  const isBullet = trimmed.startsWith("-") || trimmed.startsWith("•")
+
+  if (isBullet) {
+    const items: string[] = []
+    while (index < lines.length) {
+      const item = lines[index].trim()
+      if (!item.startsWith("-") && !item.startsWith("•")) break
+      items.push(item.replace(/^[-•]\s*/, ""))
+      index++
+    }
+    index--
+    blocks.push({ type: "bullet-list", items })
+  } else if (/^[A-ZÁÉÍÓÚ][a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+:$/.test(line)) {
+    blocks.push({ type: "heading", text: line })
+  } else if (/^\s{2,}/.test(line)) {
+    blocks.push({ type: "mono", text: trimmed })
+  } else if (/^\d+\./.test(trimmed)) {
+    blocks.push({ type: "numbered", text: trimmed })
+  } else if (!trimmed) {
+    blocks.push({ type: "spacer" })
+  } else {
+    blocks.push({ type: "paragraph", text: line })
+  }
+}
+
+const difficultyStyle = difficultyPresentation[difficulty]
+const related = algorithm ? getRelatedAlgorithms(algorithm, 6) : []
+const faqs = algorithm ? buildAlgorithmFaqs(locale, algorithm, description) : []
+const isEs = locale === "es"
+---
+
+<article
+  data-algorithm-description
+  data-page-title={pageTitle}
+  data-meta-description={metaDescription}
+  class="text-[13px] text-neutral-400 leading-relaxed font-[inherit]"
+>
+  {
+    showHeader && (
+      <div class="mb-4 flex items-center gap-2.5">
+        <h2 class="text-lg font-semibold text-white font-heading">{title}</h2>
+        <span
+          class:list={[
+            "inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-full border",
+            difficultyStyle.background,
+            difficultyStyle.color,
+          ]}
+        >
+          <span class:list={["w-1.5 h-1.5 rounded-full", difficultyStyle.dot]} />
+          {difficultyStyle.label[locale]}
+        </span>
+      </div>
+    )
+  }
+
+  <ComplexityChart description={description} locale={locale} />
+
+  {
+    blocks.map((block) => {
+      if (block.type === "heading") {
+        return (
+          <h3 class="text-sm font-semibold text-neutral-200 mt-5 mb-2 font-heading">
+            {block.text}
+          </h3>
+        )
+      }
+      if (block.type === "bullet-list") {
+        return (
+          <ul class="list-none m-0 p-0" role="list">
+            {block.items.map((item) => (
+              <li class="flex gap-2 ml-2 my-0.5">
+                <span class="text-neutral-600 shrink-0" aria-hidden="true">•</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+      if (block.type === "mono") {
+        return <div class="font-mono text-xs text-neutral-500 ml-4 my-0.5">{block.text}</div>
+      }
+      if (block.type === "numbered") {
+        return (
+          <div class="flex gap-2 ml-2 my-0.5">
+            <span>{block.text}</span>
+          </div>
+        )
+      }
+      if (block.type === "spacer") return <div class="h-2" />
+      return <p class="my-1">{block.text}</p>
+    })
+  }
+
+  {
+    related.length > 0 && (
+      <section class="mt-6 pt-4 border-t border-white/8">
+        <h3 class="text-sm font-semibold text-neutral-200 mb-2 font-heading">
+          {isEs ? "Algoritmos relacionados" : "Related algorithms"}
+        </h3>
+        <ul class="list-none m-0 p-0 flex flex-wrap gap-1.5">
+          {related.map((item) => (
+            <li>
+              <a
+                href={getAlgorithmPath(locale, item.id)}
+                class="inline-flex px-2 py-1 text-[11px] rounded-md border border-white/8 text-neutral-300 hover:border-white/20 hover:text-white transition-colors"
+              >
+                {item.name}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
+  {
+    faqs.length > 0 && (
+      <section class="mt-6 pt-4 border-t border-white/8">
+        <h3 class="text-sm font-semibold text-neutral-200 mb-3 font-heading">
+          {isEs ? "Preguntas frecuentes" : "Frequently asked questions"}
+        </h3>
+        <dl class="space-y-3 m-0">
+          {faqs.map((item) => (
+            <div>
+              <dt class="text-xs font-medium text-neutral-300 mb-1">{item.question}</dt>
+              <dd class="text-xs text-neutral-500 leading-relaxed m-0">{item.answer}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    )
+  }
+</article>

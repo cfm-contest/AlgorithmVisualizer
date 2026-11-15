@@ -1,0 +1,42 @@
+---
+import Layout from "@layouts/Layout.astro"
+import SiteHeader from "@components/SiteHeader.astro"
+import SiteSidebar from "@components/SiteSidebar.astro"
+import CodePanelShell from "@components/CodePanelShell.astro"
+import WelcomeHome from "@components/WelcomeHome.astro"
+import { locales, defaultLocale } from "@i18n/translations"
+import type { GetStaticPaths } from "astro"
+import type { Locale } from "@i18n/translations"
+import { getHomeStructuredData } from "@lib/seo"
+
+export const getStaticPaths: GetStaticPaths = () => {
+  return locales
+    .filter((lang) => lang !== defaultLocale)
+    .map((lang) => ({ params: { lang } }))
+}
+
+const { lang } = Astro.params as { lang: Locale }
+const canonicalURL = new URL(`/${lang}/`, Astro.site).href
+---
+
+<Layout
+  locale={lang}
+  canonicalURL={canonicalURL}
+  ogImage="/og/default.jpg"
+  structuredData={getHomeStructuredData(lang, canonicalURL)}
+>
+  <div class="h-screen flex flex-col overflow-hidden">
+    <SiteHeader locale={lang} />
+    <div class="flex-1 flex overflow-hidden min-h-0 relative">
+      <SiteSidebar locale={lang} />
+      <main
+        id="main-content"
+        class="flex-1 flex flex-col overflow-hidden min-w-0"
+        aria-label="Algorithm visualization"
+      >
+        <WelcomeHome locale={lang} />
+      </main>
+      <CodePanelShell locale={lang} initialCollapsed={true} />
+    </div>
+  </div>
+</Layout>

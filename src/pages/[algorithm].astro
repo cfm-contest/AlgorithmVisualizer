@@ -1,0 +1,130 @@
+---
+import Layout from "@layouts/Layout.astro"
+import SiteHeader from "@components/SiteHeader.astro"
+import SiteSidebar from "@components/SiteSidebar.astro"
+import CodePanelShell from "@components/CodePanelShell.astro"
+import AlgoStage from "@components/AlgoStage.astro"
+import CategoryHub from "@components/CategoryHub.astro"
+import { algorithmCatalog, getCatalogEntry } from "@lib/algorithms/catalog"
+import { loadAlgorithm } from "@lib/algorithms/loaders"
+import { defaultLocale } from "@i18n/translations"
+import {
+  getAlgorithmMetaTitle,
+  getAlgorithmMetaDescription,
+  loadAlgorithmDescription,
+} from "@lib/algorithm-content"
+import {
+  getAllCategorySlugs,
+  getCategoryBySlug,
+  getCategoryMetaDescription,
+  getCategoryMetaTitle,
+} from "@lib/categories"
+import { getAlgorithmStructuredData, getCategoryStructuredData } from "@lib/seo"
+import { getCategoryOgImagePath, getOgImagePath } from "@lib/locale-url"
+import type { GetStaticPaths } from "astro"
+import type { AlgorithmSummary, CategorySummary, Step } from "@lib/types"
+
+export const getStaticPaths: GetStaticPaths = async () => {
+  const algorithmPaths = algorithmCatalog.map((algo) => ({
+    params: { algorithm: algo.id },
+    props: { kind: "algorithm" as const, algorithmId: algo.id },
+  }))
+  const categoryPaths = getAllCategorySlugs().map((slug) => ({
+    params: { algorithm: slug },
+    props: { kind: "category" as const, categorySlug: slug },
+  }))
+  return [...algorithmPaths, ...categoryPaths]
+}
+
+type Props =
+  | { kind: "algorithm"; algorithmId: string }
+  | { kind: "category"; categorySlug: string }
+
+const props = Astro.props as Props
+const isCategory = props.kind === "category"
+
+let title = ""
+let description = ""
+let canonicalURL = ""
+let ogImage = "/og/default.jpg"
+let structuredData: Record<string, unknown> = {}
+let category: CategorySummary | null = null
+let algo: AlgorithmSummary | null = null
+let initialSteps: Step[] = []
+let algorithmDescription = ""
+
+if (isCategory) {
+  category = getCategoryBySlug(props.categorySlug)!
+  title = getCategoryMetaTitle(defaultLocale, category.name)
+  description = getCategoryMetaDescription(defaultLocale, category.name)
+  canonicalURL = new URL(`/${props.categorySlug}/`, Astro.site).href
+  ogImage = getCategoryOgImagePath(props.categorySlug)
+  structuredData = getCategoryStructuredData(
+    defaultLocale,
+    category,
+    props.categorySlug,
+    canonicalURL,
+  )
+} else {
+  algo = getCatalogEntry(props.algorithmId)!
+  const full = await loadAlgorithm(algo.id)
+  initialSteps = full.generateSteps(defaultLocale)
+  algorithmDescription = await loadAlgorithmDescription(defaultLocale, algo.id)
+  title = getAlgorithmMetaTitle(defaultLocale, algo.name, algorithmDescription)
+  description = getAlgorithmMetaDescription(defaultLocale, algorithmDescription)
+  canonicalURL = new URL(`/${algo.id}/`, Astro.site).href
+  ogImage = getOgImagePath(algo.id)
+  structuredData = getAlgorithmStructuredData(
+    defaultLocale,
+    algo,
+    canonicalURL,
+    algorithmDescription,
+  )
+}
+---
+
+<Layout
+  locale={defaultLocale}
+  title={title}
+  description={description}
+  canonicalURL={canonicalURL}
+  ogImage={ogImage}
+  structuredData={structuredData}
+>
+  <div class="h-screen flex flex-col overflow-hidden">
+    <SiteHeader locale={defaultLocale} algorithm={algo ?? undefined} />
+    {/* data-spa-shell: sidebar links swap content client-side (see speculation rules in Layout) */}
+    <div
+      class="flex-1 flex overflow-hidden min-h-0 relative"
+      data-spa-shell={!isCategory && algo ? "" : undefined}
+    >
+      <SiteSidebar locale={defaultLocale} selectedId={algo?.id} />
+      {
+        isCategory && category ? (
+          <CategoryHub locale={defaultLocale} category={category} />
+        ) : algo ? (
+          <AlgoStage
+            locale={defaultLocale}
+            algorithm={algo}
+            steps={initialSteps}
+            description={algorithmDescription}
+            pageTitle={title}
+            metaDescription={description}
+          />
+        ) : null
+      }
+      {
+        isCategory ? (
+          <CodePanelShell locale={defaultLocale} initialCollapsed={true} />
+        ) : algo ? (
+          <CodePanelShell
+            locale={defaultLocale}
+            initialCollapsed={false}
+            initialAlgorithmId={algo.id}
+            initialStep={initialSteps[0]}
+          />
+        ) : null
+      }
+    </div>
+  </div>
+</Layout>
